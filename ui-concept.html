@@ -1,0 +1,563 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>UI concept — character creation, HUD, character bay, audio</title>
+<style>
+  :root { color-scheme: dark;
+    --bg:#070b12; --panel:rgba(14,22,36,.82); --edge:rgba(86,175,255,.22);
+    --edge-hot:rgba(86,175,255,.55); --cy:#5ec8ff; --cy-dim:#2a7fb8;
+    --txt:#d9e6f5; --dim:#7e93ad; --faint:#4d5f76;
+    --good:#4ade80; --bad:#fb7185; --warn:#fbbf24; --violet:#a78bfa;
+    --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    /* industrial register — amber/steel. Cyan carries DATA, amber carries
+       STATE, so the two palettes have separate jobs instead of competing. */
+    --amb:#ffa62b; --amb-dim:#b06f14; --steel:#495159; --gun:#23272e;
+    --plate:#2b3037; --stencil:#cfd6dd; }
+  *{box-sizing:border-box}
+  body{margin:0;background:
+      radial-gradient(1100px 600px at 18% -10%, rgba(35,90,150,.28), transparent 60%),
+      radial-gradient(800px 500px at 100% 100%, rgba(80,40,140,.16), transparent 55%),
+      var(--bg);
+    font-family:var(--sans);color:var(--txt);padding:18px;font-size:12px}
+  .lbl{font-size:9.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--faint)}
+  h2{font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:var(--cy);
+     margin:26px 0 8px;font-weight:600}
+  h2:first-of-type{margin-top:0}
+  h2 span{color:var(--faint);letter-spacing:0;text-transform:none;font-weight:400;font-size:10.5px}
+  .pnl{position:relative;background:var(--panel);border:1px solid var(--edge);
+       border-radius:3px;backdrop-filter:blur(6px)}
+  .pnl::before,.pnl::after{content:"";position:absolute;width:9px;height:9px;
+       border:1px solid var(--edge-hot);pointer-events:none}
+  .pnl::before{top:-1px;left:-1px;border-right:0;border-bottom:0}
+  .pnl::after{bottom:-1px;right:-1px;border-left:0;border-top:0}
+  .note{font-size:10px;color:var(--faint);margin-top:7px;line-height:1.55}
+  .note b{color:var(--dim);font-weight:600}
+  .btns{display:flex;gap:7px;justify-content:flex-end;margin-top:12px;
+        padding-top:10px;border-top:1px solid var(--edge)}
+  .btn{font-size:10px;letter-spacing:.08em;text-transform:uppercase;padding:5px 12px;
+       border:1px solid var(--edge-hot);color:var(--cy)}
+  .btn.p{background:rgba(94,200,255,.15)} .btn.g{border-color:var(--edge);color:var(--faint)}
+
+  /* ---------- step rail ---------- */
+  .rail{display:flex;align-items:center;gap:0;padding:12px 14px 0}
+  .step{display:flex;align-items:center;gap:7px}
+  .num{width:20px;height:20px;border:1px solid var(--edge);border-radius:50%;
+       display:grid;place-items:center;font-family:var(--mono);font-size:10px;color:var(--faint)}
+  .step .t{font-size:10px;letter-spacing:.11em;text-transform:uppercase;color:var(--faint)}
+  .step.done .num{border-color:var(--good);color:var(--good)}
+  .step.done .t{color:var(--dim)}
+  .step.on .num{border-color:var(--cy);color:var(--cy);background:rgba(94,200,255,.13);
+       box-shadow:0 0 12px rgba(94,200,255,.3)}
+  .step.on .t{color:var(--cy);font-weight:600}
+  .bar{flex:1;height:1px;background:var(--edge);margin:0 11px}
+  .bar.done{background:rgba(74,222,128,.45)}
+
+  /* ---------- roster ---------- */
+  .roster{display:grid;grid-template-columns:repeat(5,1fr);gap:9px;padding:13px 14px}
+  .card{position:relative;border:1px solid var(--edge);background:rgba(10,17,28,.6);
+        padding:9px 8px 10px;text-align:center}
+  .card.on{border-color:var(--cy);background:rgba(94,200,255,.1);
+           box-shadow:0 0 0 1px var(--cy),0 0 22px rgba(94,200,255,.16) inset}
+  .card .role{font-size:10.5px;font-weight:600;margin-top:5px}
+  .card .pay{font-family:var(--mono);font-size:10px;color:var(--cy);margin-top:2px}
+  .card .sub{font-size:9px;color:var(--faint);margin-top:2px;line-height:1.35}
+
+  .axes{display:grid;grid-template-columns:1fr 1fr 1fr;gap:1px;background:var(--edge)}
+  .ax{background:rgba(10,17,28,.94);padding:10px 13px}
+  .seg{display:flex;gap:1px;margin-top:7px;background:var(--edge)}
+  .sg{flex:1;text-align:center;font-size:10px;padding:5px 2px;background:rgba(14,22,36,.9);color:var(--dim)}
+  .sg.on{background:rgba(94,200,255,.16);color:var(--cy);font-weight:600}
+
+  /* ---------- look step ---------- */
+  .look{display:grid;grid-template-columns:230px 1fr;gap:1px;background:var(--edge)}
+  .stagebox{background:rgba(8,14,24,.96);padding:16px;display:grid;place-items:center;
+        position:relative;overflow:hidden}
+  .stagebox::after{content:"";position:absolute;inset:auto 0 0 0;height:60%;
+        background:radial-gradient(60% 100% at 50% 100%, rgba(94,200,255,.13), transparent 70%)}
+  .opts{background:rgba(10,17,28,.94);padding:12px 15px}
+  .orow{display:grid;grid-template-columns:86px 1fr;gap:11px;align-items:center;
+        padding:6px 0;border-bottom:1px solid rgba(86,175,255,.08)}
+  .orow .on2{font-size:10.5px;color:var(--dim)}
+  .sw{display:flex;gap:5px}
+  .chip{width:19px;height:19px;border-radius:50%;border:1px solid rgba(255,255,255,.14)}
+  .chip.sel{box-shadow:0 0 0 2px var(--cy)}
+  .sel2{font-size:10.5px;color:var(--txt);border:1px solid var(--edge);padding:3px 8px}
+
+  /* breathing idle */
+  @keyframes breathe{0%,100%{transform:translateY(0) scaleY(1)}50%{transform:translateY(-1.1px) scaleY(1.012)}}
+  @keyframes blink{0%,94%,100%{transform:scaleY(1)}97%{transform:scaleY(.12)}}
+  @keyframes sway{0%,100%{transform:rotate(-.7deg)}50%{transform:rotate(.7deg)}}
+  .idle{animation:breathe 3.6s ease-in-out infinite}
+  .eyes{animation:blink 5.2s linear infinite;transform-origin:center}
+  .swaying{animation:sway 6s ease-in-out infinite;transform-origin:50% 90%}
+  @media (prefers-reduced-motion: reduce){.idle,.eyes,.swaying{animation:none}}
+
+  /* ---------- reveal ---------- */
+  .reveal{display:grid;grid-template-columns:1fr;gap:0}
+  .filled{background:rgba(10,17,28,.94);padding:12px 15px}
+  .fr{display:grid;grid-template-columns:1fr auto auto;gap:10px;padding:4px 0;
+      border-bottom:1px solid rgba(86,175,255,.08);align-items:baseline;font-size:10.5px}
+  .fr .v{font-family:var(--mono);color:var(--cy)}
+  .fr .src{font-size:8.5px;letter-spacing:.05em;padding:1px 5px;border:1px solid var(--edge)}
+  .src.real{color:var(--good);border-color:rgba(74,222,128,.4)}
+  .src.der{color:var(--warn);border-color:rgba(251,191,36,.4)}
+
+  /* ---------- status strip ---------- */
+  .strip{display:grid;grid-template-columns:repeat(4,1fr) auto;gap:1px;
+         background:var(--edge);margin-bottom:12px}
+  .stat{background:rgba(10,17,28,.92);padding:9px 13px}
+  .stat .v{font-family:var(--mono);font-size:19px;font-weight:600;line-height:1.15;margin-top:3px}
+  .stat .d{font-family:var(--mono);font-size:10.5px;margin-top:2px}
+  .up{color:var(--good)} .dn{color:var(--bad)} .flat{color:var(--faint)}
+  .verdict{background:rgba(10,17,28,.92);padding:9px 15px;display:flex;align-items:center;
+           gap:9px;min-width:150px}
+  .dot{width:7px;height:7px;border-radius:50%;background:var(--warn);box-shadow:0 0 9px var(--warn)}
+
+  /* ---------- hud ---------- */
+  .grid{display:grid;grid-template-columns:186px 1fr 200px;gap:12px}
+  .cmd{padding:10px 11px}
+  .ctl{margin-bottom:11px}
+  .ctl .top{display:flex;justify-content:space-between;align-items:baseline}
+  .ctl .nm{font-size:10px;color:var(--dim)}
+  .ctl .vl{font-family:var(--mono);font-size:11px;color:var(--cy)}
+  .track{height:2px;background:rgba(120,150,190,.22);margin-top:6px;position:relative}
+  .fill{position:absolute;inset:0 auto 0 0;background:linear-gradient(90deg,var(--cy-dim),var(--cy))}
+  .knob{position:absolute;top:-3.5px;width:9px;height:9px;border-radius:50%;background:var(--cy);
+        box-shadow:0 0 8px var(--cy);transform:translateX(-50%)}
+  .hot .nm,.hot .vl{color:#fff}
+  .keys{display:flex;gap:4px;margin-top:9px;padding-top:9px;border-top:1px solid var(--edge)}
+  .key{font-family:var(--mono);font-size:9px;color:var(--faint);border:1px solid var(--edge);
+       padding:2px 5px;border-radius:2px}
+  .vp{padding:11px 13px 8px;position:relative}
+  .vphead{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+  .vtabs{display:flex;gap:3px}
+  .vt{font-size:9.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--faint);
+      padding:3px 8px;border:1px solid transparent}
+  .vt.on{color:var(--cy);border-color:var(--edge-hot);background:rgba(94,200,255,.07)}
+
+  /* docked corner avatar */
+  .dock{position:absolute;left:11px;bottom:34px;display:flex;align-items:flex-end;gap:8px;
+        pointer-events:none}
+  .dockav{width:62px;height:62px;border:1px solid var(--edge);border-radius:3px;
+        background:linear-gradient(180deg,rgba(14,22,36,.5),rgba(94,200,255,.09));
+        position:relative}
+  .bubble{background:rgba(10,17,28,.94);border:1px solid rgba(251,191,36,.5);
+        padding:5px 9px;font-size:9.5px;color:var(--warn);max-width:168px;line-height:1.45;
+        position:relative;margin-bottom:5px}
+  .scrub{margin-top:7px;padding-top:8px;border-top:1px solid var(--edge);position:relative}
+  .ticks{display:flex;justify-content:space-between;font-family:var(--mono);font-size:8.5px;color:var(--faint)}
+  .insp{padding:10px 11px}
+  .row{display:flex;justify-content:space-between;font-family:var(--mono);font-size:10px;
+       padding:2.5px 0;border-bottom:1px solid rgba(86,175,255,.07)}
+  .row .k{color:var(--dim);font-family:var(--sans);font-size:10px}
+  .grp{font-size:9px;letter-spacing:.13em;text-transform:uppercase;color:var(--cy-dim);margin:9px 0 3px}
+
+  /* ---------- three states ---------- */
+  .states{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--edge)}
+  .st{background:rgba(10,17,28,.94);padding:12px;text-align:center}
+  .st .h{font-size:10px;letter-spacing:.12em;text-transform:uppercase;margin-top:6px}
+
+  /* ---------- settings ---------- */
+  .set{display:grid;grid-template-columns:150px 1fr;gap:1px;background:var(--edge)}
+  .nav{background:rgba(10,17,28,.94);padding:9px 0}
+  .ni{padding:5px 13px;font-size:10.5px;color:var(--dim);border-left:2px solid transparent}
+  .ni.on{color:var(--cy);border-left-color:var(--cy);background:rgba(94,200,255,.07)}
+  .ni .b{width:5px;height:5px;border-radius:50%;background:var(--warn);display:inline-block;
+         margin-left:6px;vertical-align:middle}
+  .body{background:rgba(10,17,28,.94);padding:12px 15px}
+  .sr{display:grid;grid-template-columns:1fr 132px;gap:12px;padding:7px 0;
+      border-bottom:1px solid rgba(86,175,255,.09);align-items:center}
+  .sr .n{font-size:11px}
+  .sr .h{font-size:9.5px;color:var(--faint);margin-top:1px;line-height:1.4}
+  .fld{font-family:var(--mono);font-size:10.5px;color:var(--cy);text-align:right;
+       border:1px solid var(--edge);padding:3px 7px}
+  .tog{width:30px;height:15px;border-radius:8px;background:rgba(94,200,255,.5);
+       position:relative;margin-left:auto}
+  .tog::after{content:"";position:absolute;top:2px;right:2px;width:11px;height:11px;
+       border-radius:50%;background:var(--cy)}
+  .tog.off{background:rgba(120,150,190,.22)}
+  .tog.off::after{right:auto;left:2px;background:var(--faint)}
+  .vol{height:2px;background:rgba(120,150,190,.22);position:relative;margin-left:auto;width:100%}
+  .vol .f{position:absolute;inset:0 auto 0 0;background:var(--cy)}
+  .vol .k{position:absolute;top:-3.5px;width:9px;height:9px;border-radius:50%;
+       background:var(--cy);transform:translateX(-50%);box-shadow:0 0 8px var(--cy)}
+  .corner{display:grid;grid-template-columns:repeat(2,26px);grid-template-rows:repeat(2,20px);
+       gap:3px;margin-left:auto}
+  .cq{border:1px solid var(--edge);background:rgba(14,22,36,.8)}
+  .cq.on{border-color:var(--cy);background:rgba(94,200,255,.2)}
+  .bars{display:flex;align-items:flex-end;gap:2px;height:22px;margin-top:7px}
+  .bars i{width:5px;background:var(--cy-dim);opacity:.8}
+
+  /* ================= CHARACTER BAY — industrial register ================= */
+  /* The bay is now a CELL INSIDE the status strip, so it can never
+     stretch the band again — the strip sets the height, not the bay. */
+  .bay{position:relative;background:
+        linear-gradient(180deg,#2b3037 0%,#23272e 46%,#1b1f24 100%);
+        border:1px solid #3c444d;border-radius:2px;overflow:hidden;
+        box-shadow:inset 0 1px 0 rgba(255,255,255,.07), 0 0 0 1px #14171b}
+  /* riveted corner bolts */
+  .bolt{position:absolute;width:3px;height:3px;border-radius:50%;
+        background:radial-gradient(circle at 35% 35%,#8d979f,#3b4249);
+        box-shadow:0 0 0 1px rgba(0,0,0,.5)}
+  /* hazard chevrons down the left edge */
+  .hazard{position:absolute;left:0;top:0;bottom:0;width:4px;
+        background:repeating-linear-gradient(-45deg,var(--amb) 0 3px,#1b1f24 3px 6px);
+        opacity:.5}
+  .baylbl{position:relative;z-index:3;display:flex;justify-content:space-between;
+        align-items:center;padding:2px 5px 2px 9px;border-bottom:1px solid #3c444d;
+        background:linear-gradient(180deg,rgba(255,166,43,.10),transparent)}
+  .baylbl .t{font-family:var(--mono);font-size:7px;letter-spacing:.12em;color:var(--amb);
+        text-transform:uppercase}
+  .led{width:5px;height:5px;border-radius:50%;background:var(--amb);
+        box-shadow:0 0 6px var(--amb);animation:led 2.4s steps(1,end) infinite}
+  @keyframes led{0%,64%{opacity:1}65%,100%{opacity:.22}}
+  .stage{position:relative;height:66px}
+  /* radar sweep behind the figure */
+  .sweep{position:absolute;left:50%;top:54%;width:78px;height:78px;margin:-39px 0 0 -39px;
+        border-radius:50%;
+        background:conic-gradient(from 0deg, rgba(255,166,43,.20), transparent 62%);
+        animation:spin 5.2s linear infinite;opacity:.5}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .floorgrid{position:absolute;inset:auto 0 0 0;height:22px;
+        background:
+          repeating-linear-gradient(90deg,rgba(163,176,188,.30) 0 1px,transparent 1px 9px),
+          repeating-linear-gradient(0deg,rgba(163,176,188,.24) 0 1px,transparent 1px 7px),
+          linear-gradient(180deg,transparent,rgba(255,166,43,.09));
+        transform:perspective(90px) rotateX(58deg);transform-origin:bottom}
+  .figwrap{position:absolute;inset:0;display:grid;place-items:end center;padding-bottom:5px}
+  /* CRT scanlines + sweep over the whole bay */
+  .scan{position:absolute;inset:0;z-index:4;pointer-events:none;
+        background:repeating-linear-gradient(0deg,rgba(0,0,0,.24) 0 1px,transparent 1px 3px)}
+  .scanbar{position:absolute;left:0;right:0;height:14px;z-index:5;pointer-events:none;
+        background:linear-gradient(180deg,transparent,rgba(255,255,255,.055),transparent);
+        animation:scanmove 4.4s linear infinite}
+  @keyframes scanmove{0%{top:-14px}100%{top:100%}}
+  .vign{position:absolute;inset:0;z-index:4;pointer-events:none;
+        background:radial-gradient(70% 60% at 50% 42%,transparent 40%,rgba(0,0,0,.55) 100%)}
+  .baystat{position:relative;z-index:3;border-top:1px solid #3c444d;padding:2px 6px;
+        display:flex;justify-content:center;font-family:var(--mono);font-size:7px;
+        letter-spacing:.14em;color:#8d979f;background:rgba(0,0,0,.28)}
+  .baystat b{color:var(--amb);font-weight:600}
+
+  /* idle loop — breath, weight shift, occasional cuff check */
+  @keyframes brth{0%,100%{transform:translateY(0)}50%{transform:translateY(-1.3px)}}
+  @keyframes shift{0%,100%{transform:rotate(-1deg)}50%{transform:rotate(1deg)}}
+  @keyframes cuff{0%,84%,100%{transform:rotate(0deg)}
+                  88%{transform:rotate(-38deg)}94%{transform:rotate(-34deg)}}
+  @keyframes bl{0%,95%,100%{transform:scaleY(1)}97.5%{transform:scaleY(.1)}}
+  .b-brth{animation:brth 3.8s ease-in-out infinite}
+  .b-shift{animation:shift 7s ease-in-out infinite;transform-origin:50% 96%}
+  .b-cuff{animation:cuff 9s ease-in-out infinite;transform-origin:78px 74px}
+  .b-eye{animation:bl 6s linear infinite;transform-origin:center}
+  @media (prefers-reduced-motion: reduce){
+    .b-brth,.b-shift,.b-cuff,.b-eye,.sweep,.scanbar,.led{animation:none}}
+</style>
+</head>
+<body>
+
+<!-- ============ A · CHARACTER CREATION (own page) ============ -->
+<h2>A · Character creation — its own full page <span>runs once, then never again unless you re-open it</span></h2>
+
+<div class="pnl">
+  <div class="rail">
+    <div class="step done"><span class="num">✓</span><span class="t">Role</span></div>
+    <div class="bar done"></div>
+    <div class="step done"><span class="num">✓</span><span class="t">Life</span></div>
+    <div class="bar done"></div>
+    <div class="step on"><span class="num">3</span><span class="t">Look</span></div>
+    <div class="bar"></div>
+    <div class="step"><span class="num">4</span><span class="t">Review</span></div>
+  </div>
+
+  <div class="roster" style="padding-bottom:4px">
+    <div class="card"><div style="height:34px"></div><div class="role">Surgeon</div>
+      <div class="sub">high pay · late start</div></div>
+    <div class="card on"><div style="height:34px"></div><div class="role">Software Eng.</div>
+      <div class="pay">$137,450</div><div class="sub">WA · mid-career</div></div>
+    <div class="card"><div style="height:34px"></div><div class="role">Architect</div>
+      <div class="sub">long licensure</div></div>
+    <div class="card"><div style="height:34px"></div><div class="role">Teacher</div>
+      <div class="sub">pension model</div></div>
+    <div class="card"><div style="height:34px"></div><div class="role">Sales / AE</div>
+      <div class="sub">commission</div></div>
+  </div>
+  <div class="note" style="padding:0 14px 11px">Steps 1 and 2 collapse to a summary once done.
+    Roster also carries Nurse, Attorney, Physician, Electrician and <b>Custom / blank</b>.</div>
+
+  <!-- step 3: look -->
+  <div class="look">
+    <div class="stagebox">
+      <svg viewBox="0 0 120 150" width="150" height="188" class="swaying">
+        <ellipse cx="60" cy="145" rx="30" ry="4" fill="rgba(94,200,255,.16)"/>
+        <g class="idle">
+          <path d="M60 128V96" stroke="#5847c4" stroke-width="15" stroke-linecap="round"/>
+          <path d="M26 132v-30c0-17 15-27 34-27s34 10 34 27v30z" fill="#6d5ce0"/>
+          <path d="M48 75h24l-12 20z" fill="#5847c4"/>
+          <rect x="47" y="98" width="26" height="17" rx="2" fill="#1b2438"/>
+          <path d="M53 103l4 5-4 5M67 103l-4 5 4 5" stroke="#5ec8ff" stroke-width="1.6" fill="none"/>
+          <circle cx="60" cy="52" r="20" fill="#e8b48a"/>
+          <path d="M40 48c0-14 9-19 20-19s20 5 20 19c-6-7-13-9-20-9s-14 2-20 9z" fill="#3f3a4a"/>
+          <g class="eyes" style="transform-origin:60px 54px">
+            <circle cx="52" cy="54" r="2.1" fill="#26202c"/><circle cx="68" cy="54" r="2.1" fill="#26202c"/>
+          </g>
+          <path d="M54 62q6 4 12 0" stroke="#b07f5c" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+        </g>
+      </svg>
+    </div>
+    <div class="opts">
+      <div class="lbl" style="margin-bottom:7px">Appearance — cosmetic only</div>
+      <div class="orow"><span class="on2">Presentation</span><span class="sel2">Masculine ▾</span></div>
+      <div class="orow"><span class="on2">Skin</span>
+        <div class="sw"><span class="chip" style="background:#f3d3b8"></span>
+          <span class="chip sel" style="background:#e8b48a"></span>
+          <span class="chip" style="background:#c98f6a"></span>
+          <span class="chip" style="background:#9c6640"></span>
+          <span class="chip" style="background:#6b4228"></span>
+          <span class="chip" style="background:#452a19"></span></div></div>
+      <div class="orow"><span class="on2">Hair</span>
+        <div class="sw"><span class="chip" style="background:#3f3a4a"></span>
+          <span class="chip" style="background:#6b4228"></span>
+          <span class="chip" style="background:#b8860b"></span>
+          <span class="chip" style="background:#9ca3af"></span>
+          <span class="chip" style="background:#7c3aed"></span></div></div>
+      <div class="orow"><span class="on2">Build</span><span class="sel2">Average ▾</span></div>
+      <div class="orow"><span class="on2">Attire</span><span class="sel2">Match role — hoodie ▾</span></div>
+      <div class="orow" style="border:0"><span class="on2">Idle motion</span><span class="sel2">Subtle ▾</span></div>
+      <div class="note"><b>None of this touches a number.</b> Presentation picks an SSA
+        longevity table — the one place it is genuinely actuarial — and nothing else.</div>
+      <div class="btns"><span class="btn g">Back</span><span class="btn">Randomise</span>
+        <span class="btn p">Next — review</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ B · STEP 4 REVIEW ============ -->
+<h2>B · Step 4 — what it filled in <span>every value badged by provenance, before you commit</span></h2>
+<div class="pnl filled">
+  <div class="fr"><span>Gross salary</span><span class="v">$137,450</span><span class="src real">BLS OEWS · WA</span></div>
+  <div class="fr"><span>State income tax</span><span class="v">0%</span><span class="src real">statute</span></div>
+  <div class="fr"><span>Traditional 401(k)</span><span class="v">$96,400</span><span class="src der">SCF band</span></div>
+  <div class="fr"><span>Taxable brokerage</span><span class="v">$34,800</span><span class="src der">SCF band</span></div>
+  <div class="fr"><span>Annual spending</span><span class="v">$71,900</span><span class="src der">BEA · WA</span></div>
+  <div class="fr"><span>Life expectancy</span><span class="v">81</span><span class="src real">SSA table</span></div>
+  <div class="note"><b>Green</b> measured for this role and state. <b>Amber</b> derived from age
+    and income band — nobody publishes balances by occupation. Badges never fade.</div>
+  <div class="btns"><span class="btn g">Back</span><span class="btn">Edit values</span>
+    <span class="btn p">Begin — hide creation</span></div>
+</div>
+
+<!-- ============ C · HUD WITH TOP-RIGHT CHARACTER BAY ============ -->
+<h2>C · HUD — character bay, top right <span>compact portrait niche inside the status strip · cyan = data, amber = state</span></h2>
+
+<div class="strip" style="grid-template-columns:repeat(4,1fr) 94px">
+  <div class="stat"><div class="lbl" style="white-space:nowrap">Net worth @ 65</div>
+    <div class="v">$1.41M</div><div class="d up">▲ +$62,800</div></div>
+  <div class="stat"><div class="lbl">Lifetime tax</div><div class="v">$684k</div>
+    <div class="d dn">▼ −$3,140</div></div>
+  <div class="stat"><div class="lbl">Monte Carlo</div>
+    <div class="v">61.2<span style="font-size:12px;color:var(--dim)">%</span></div>
+    <div class="d up">▲ +1.8 pt</div></div>
+  <div class="stat"><div class="lbl">Plan status</div>
+    <div class="v" style="color:var(--amb);font-size:15px">AT RISK</div>
+    <div class="d flat">short by 9 yrs</div></div>
+
+  <!-- character bay: a cell in the strip, so it cannot drive the height -->
+  <div class="bay">
+    <span class="bolt" style="top:3px;left:3px"></span>
+    <span class="bolt" style="top:3px;right:3px"></span>
+    <span class="bolt" style="bottom:3px;left:3px"></span>
+    <span class="bolt" style="bottom:3px;right:3px"></span>
+    <span class="hazard"></span>
+    <div class="baylbl"><span class="t">SE-04</span><span class="led"></span></div>
+    <div class="stage">
+      <span class="sweep"></span>
+      <span class="floorgrid"></span>
+      <div class="figwrap">
+        <svg viewBox="22 14 76 172" width="30" height="68" style="display:block">
+          <ellipse cx="60" cy="182" rx="22" ry="3" fill="rgba(255,166,43,.24)"/>
+          <g class="b-shift">
+            <path d="M50 120h8v56h-9z" fill="#3b4553"/>
+            <path d="M62 120h8v56h-9z" fill="#44505f"/>
+            <path d="M41 176h19v6H41z" fill="#1c2129"/>
+            <path d="M61 176h19v6H61z" fill="#1c2129"/>
+            <g class="b-brth">
+              <path d="M34 122V82c0-14 12-23 26-23s26 9 26 23v40z" fill="#6d5ce0"/>
+              <path d="M34 122V82c0-14 12-23 26-23s26 9 26 23v40z" fill="url(#rim2)" opacity=".55"/>
+              <path d="M50 60h20l-10 22z" fill="#4d3fb0"/>
+              <rect x="48" y="86" width="24" height="15" rx="2" fill="#141920"/>
+              <path d="M54 90l4 4-4 4M66 90l-4 4 4 4" stroke="#5ec8ff" stroke-width="1.8" fill="none"/>
+              <path d="M34 84c-8 3-11 13-10 24l3 17 9-2-2-16z" fill="#4a3caa"/>
+              <circle cx="30" cy="125" r="4.2" fill="#e8b48a"/>
+              <g class="b-cuff">
+                <path d="M86 84c8 3 11 13 10 24l-3 17-9-2 2-16z" fill="#4a3caa"/>
+                <circle cx="90" cy="125" r="4.2" fill="#e8b48a"/>
+                <rect x="85.5" y="117" width="9" height="4.5" rx="1" fill="#141920"/>
+                <rect x="87" y="118.2" width="6" height="2" rx=".5" fill="#ffa62b"/>
+              </g>
+              <circle cx="60" cy="40" r="17" fill="#e8b48a"/>
+              <path d="M42 40c-1-14 8-21 18-21s19 7 18 21c-2-8-4-11-8-12
+                       -4 3-16 3-20 1-4 1-6 4-8 11z" fill="#332e3d"/>
+              <g class="b-eye" style="transform-origin:60px 42px">
+                <circle cx="53.3" cy="42.6" r="2" fill="#1d1a24"/>
+                <circle cx="67.3" cy="42.6" r="2" fill="#1d1a24"/>
+              </g>
+              <path d="M77 30a17 17 0 0 1 0 20" stroke="#ffa62b" stroke-width="1.6"
+                    fill="none" opacity=".65"/>
+            </g>
+          </g>
+          <defs><linearGradient id="rim2" x1="1" y1="0" x2="0" y2="0">
+            <stop offset="0" stop-color="#ffa62b" stop-opacity=".45"/>
+            <stop offset=".45" stop-color="#ffa62b" stop-opacity="0"/></linearGradient></defs>
+        </svg>
+      </div>
+      <span class="scan"></span><span class="scanbar"></span><span class="vign"></span>
+    </div>
+    <div class="baystat"><b>READY</b></div>
+  </div>
+</div>
+
+<div class="grid">
+  <div class="pnl cmd">
+    <div class="lbl" style="margin-bottom:9px">Live controls</div>
+    <div class="ctl hot"><div class="top"><span class="nm">401(k) deferral</span><span class="vl">$9,200</span></div>
+      <div class="track"><div class="fill" style="width:23%"></div><div class="knob" style="left:23%"></div></div></div>
+    <div class="ctl"><div class="top"><span class="nm">Roth share</span><span class="vl">50%</span></div>
+      <div class="track"><div class="fill" style="width:50%"></div><div class="knob" style="left:50%"></div></div></div>
+    <div class="ctl"><div class="top"><span class="nm">Retirement age</span><span class="vl">65</span></div>
+      <div class="track"><div class="fill" style="width:60%"></div><div class="knob" style="left:60%"></div></div></div>
+    <div class="ctl"><div class="top"><span class="nm">Spending</span><span class="vl">$71,900</span></div>
+      <div class="track"><div class="fill" style="width:52%"></div><div class="knob" style="left:52%"></div></div></div>
+    <div class="ctl"><div class="top"><span class="nm">Equity weight</span><span class="vl">80%</span></div>
+      <div class="track"><div class="fill" style="width:80%"></div><div class="knob" style="left:80%"></div></div></div>
+    <div class="keys"><span class="key">1–5 focus</span><span class="key">⇅ adjust</span></div>
+    <div class="keys" style="border:0;padding-top:5px"><span class="key">S settings</span>
+      <span class="key">C character</span><span class="key">M mute</span></div>
+  </div>
+
+  <div class="pnl vp">
+    <div class="vphead">
+      <div class="vtabs"><span class="vt on">Balances</span><span class="vt">Net worth</span>
+        <span class="vt">Tax</span><span class="vt">Flow</span><span class="vt">Bands</span></div>
+      <span class="lbl" style="white-space:nowrap">no avatar over the data</span>
+    </div>
+    <svg viewBox="0 0 620 214" style="width:100%;height:auto;display:block">
+      <defs><linearGradient id="g1" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#5ec8ff" stop-opacity=".5"/>
+        <stop offset="1" stop-color="#5ec8ff" stop-opacity=".03"/></linearGradient>
+        <linearGradient id="g2" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#4ade80" stop-opacity=".4"/>
+        <stop offset="1" stop-color="#4ade80" stop-opacity=".03"/></linearGradient></defs>
+      <g stroke="rgba(86,175,255,.09)"><line x1="0" y1="40" x2="620" y2="40"/>
+        <line x1="0" y1="86" x2="620" y2="86"/><line x1="0" y1="132" x2="620" y2="132"/>
+        <line x1="0" y1="178" x2="620" y2="178"/></g>
+      <path d="M0,208 L80,200 L170,186 L260,164 L350,136 L430,112 L500,104 L560,126 L610,186 L620,208 L620,214 L0,214Z" fill="url(#g2)"/>
+      <path d="M0,211 L80,206 L170,197 L260,182 L350,163 L430,146 L500,142 L560,160 L610,200 L620,212 L620,214 L0,214Z" fill="url(#g1)"/>
+      <path d="M0,208 L80,201 L170,189 L260,170 L350,145 L430,124 L500,120 L560,146 L610,204 L620,212"
+            fill="none" stroke="#7e93ad" stroke-width="1.2" stroke-dasharray="3 3" opacity=".7"/>
+      <path d="M0,208 L80,200 L170,186 L260,164 L350,136 L430,112 L500,104 L560,126 L610,186 L620,208"
+            fill="none" stroke="#5ec8ff" stroke-width="1.8"/>
+      <line x1="430" y1="0" x2="430" y2="214" stroke="#ffa62b" stroke-dasharray="2 4" opacity=".85"/>
+      <text x="435" y="12" fill="#ffa62b" font-size="8.5" font-family="ui-monospace,monospace">RETIRE 65</text>
+      <line x1="598" y1="0" x2="598" y2="214" stroke="#fb7185" stroke-dasharray="2 3" opacity=".9"/>
+      <text x="512" y="26" fill="#fb7185" font-size="8.5" font-family="ui-monospace,monospace">DEPLETED 2078</text>
+    </svg>
+    <div class="scrub"><div class="ticks"><span>2026</span><span>2036</span><span>2046</span>
+      <span>2056</span><span>2066</span><span>2076</span><span>2081</span></div></div>
+  </div>
+
+  <div class="pnl insp">
+    <div class="lbl">Year inspector</div>
+    <div style="font-family:var(--mono);font-size:15px;color:var(--cy);margin:3px 0 2px">2052 · age 64</div>
+    <div style="font-size:9.5px;color:var(--faint)">final working year</div>
+    <div class="grp">Money in</div>
+    <div class="row"><span class="k">Wages</span><span>$236,100</span></div>
+    <div class="row"><span class="k">Dividends</span><span>$4,910</span></div>
+    <div class="grp">Money out</div>
+    <div class="row"><span class="k">Living</span><span>$129,400</span></div>
+    <div class="row"><span class="k">Tax</span><span style="color:var(--bad)">$58,720</span></div>
+    <div class="grp">Most slack</div>
+    <div class="note" style="margin-top:2px">401(k) deferral. Raising it to the limit adds
+      roughly <b>$310k</b> by 65.</div>
+  </div>
+</div>
+
+<div class="note" style="max-width:840px">The bay now sits <b>inside the status strip as a
+  fifth cell</b>, roughly a third of its previous size. That is the structural fix, not just a
+  smaller number: the strip sets the band height, so the figure can never stretch the header
+  again however it is styled. Still full body, still ambient only — breath, weight shift, an
+  occasional wrist glance, blink — with the industrial framing kept but scaled down: bolts,
+  hazard chevrons, radar sweep, floor grating, scanlines, travelling highlight. Original art
+  in that genre register, not anyone's unit designs.</div>
+
+<!-- ============ D · SETTINGS ============ -->
+<h2>D · Settings — Character &amp; audio <span>audio off by default, every switch reversible</span></h2>
+
+<div class="pnl set">
+  <div class="nav">
+    <div class="ni">Profile</div><div class="ni">Income &amp; spending</div>
+    <div class="ni">Contributions <span class="b"></span></div><div class="ni">Accounts</div>
+    <div class="ni">Markets &amp; returns</div><div class="ni">Cash sweep</div>
+    <div class="ni">Withdrawal strategy</div><div class="ni">Real estate</div>
+    <div class="ni">Per-year overrides</div><div class="ni">Tax data <span class="b"></span></div>
+    <div class="ni">Scenarios</div><div class="ni on">Character &amp; audio</div>
+    <div class="ni">Access &amp; lock</div><div class="ni">Display</div>
+  </div>
+  <div class="body">
+    <div class="lbl" style="margin-bottom:8px">Character</div>
+    <div class="sr"><div><div class="n">Show character bay</div>
+      <div class="h">The top-right panel. Purely cosmetic — nothing is lost by hiding it.</div></div>
+      <div class="tog"></div></div>
+    <div class="sr"><div><div class="n">Bay position</div>
+      <div class="h">Top right by default. Moving it reflows the status strip to match.</div></div>
+      <div class="corner"><span class="cq"></span><span class="cq on"></span>
+        <span class="cq"></span><span class="cq"></span></div></div>
+    <div class="sr"><div><div class="n">Bay size</div>
+      <div class="h">Niche is the default. Tall breaks the bay out of the strip into its own
+        panel, which makes the header band deeper — the thing you asked me to avoid.</div></div>
+      <div class="fld">Niche</div></div>
+    <div class="sr"><div><div class="n">Idle animation</div>
+      <div class="h">Breath, weight shift, wrist glance, blink. Honours
+        <code style="color:var(--dim)">prefers-reduced-motion</code> regardless of this setting.</div></div>
+      <div class="fld">Subtle</div></div>
+    <div class="sr"><div><div class="n">Bay effects</div>
+      <div class="h">Radar sweep, scanlines, travelling highlight. The costly ones to redraw —
+        turn off on a slow machine.</div></div>
+      <div class="tog"></div></div>
+    <div class="sr"><div><div class="n">Rebuild character</div>
+      <div class="h">Re-opens creation. Your current numbers are kept unless you ask to re-apply presets.</div></div>
+      <div class="fld" style="text-align:center">Open ▸</div></div>
+
+    <div class="lbl" style="margin:15px 0 8px">Audio — synthesised live, no files shipped</div>
+    <div class="sr"><div><div class="n">Music bed</div>
+      <div class="h">Industrial pulse: filtered saw bass, detuned brass-ish stabs, a slow
+        sweeping pad. Built from oscillators, so it costs bytes rather than megabytes.</div></div>
+      <div class="tog off"></div></div>
+    <div class="sr"><div><div class="n">Music volume</div>
+      <div class="h">Ducks automatically while a cue plays.</div></div>
+      <div class="vol" style="max-width:120px"><div class="f" style="width:26%"></div><div class="k" style="left:26%"></div></div></div>
+    <div class="sr"><div><div class="n">Interface sound</div>
+      <div class="h">Radio squelch on panel open, servo clunk on commit, low horn on a warning,
+        double-beep on confirm. Event cues only — never one per pixel of slider drag.</div></div>
+      <div class="tog off"></div></div>
+    <div class="sr"><div><div class="n">Sound volume</div><div class="h"></div></div>
+      <div class="vol" style="max-width:120px"><div class="f" style="width:42%"></div><div class="k" style="left:42%"></div></div></div>
+    <div class="sr"><div><div class="n">Cue set</div>
+      <div class="h">Three timbres from the same synth graph — Industrial, Clinical, Muted.
+        Filter and envelope changes, not separate sample packs.</div></div>
+      <div class="fld">Industrial</div></div>
+    <div class="bars"><i style="height:30%"></i><i style="height:62%"></i><i style="height:44%"></i>
+      <i style="height:88%"></i><i style="height:56%"></i><i style="height:72%"></i><i style="height:34%"></i>
+      <i style="height:50%"></i><i style="height:80%"></i><i style="height:40%"></i><i style="height:66%"></i>
+      <i style="height:26%"></i></div>
+    <div class="btns"><span class="btn g">Reset page</span><span class="btn">Cancel</span>
+      <span class="btn p">Apply</span></div>
+    <div class="note"><b>Master mute is <code style="color:var(--dim)">M</code> from anywhere.</b>
+      Audio stays off until you switch it on — browsers block autoplay, and unexpected music
+      on a finance tool is a bad first impression.</div>
+  </div>
+</div>
+
+</body>
+</html>

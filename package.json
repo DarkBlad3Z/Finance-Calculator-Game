@@ -1,0 +1,28 @@
+{
+  "name": "personal-finance-forecaster",
+  "version": "1.0.0",
+  "description": "Year-by-year personal finance and retirement forecasting tool. Runs entirely in the browser; no dependencies, no build step, no server.",
+  "private": true,
+  "scripts": {
+    "build": "node build.js",
+    "test": "node test-engine.js && node test-optimizer.js && node test-characters.js && node test-svg-chart.js && node test-render.js && node test-sequence.js && node test-auth.js && node test-auth-flow.js && node test-auth-dial.js",
+    "test:engine": "node test-engine.js",
+    "test:gate": "node test-auth-dial.js && node test-auth.js && node test-auth-flow.js",
+    "combo": "node set-combo.js",
+    "password": "node set-password.js",
+    "test:optimizer": "node test-optimizer.js",
+    "test:characters": "node test-characters.js",
+    "test:sequence": "node test-sequence.js",
+    "pack": "node pack.js",
+    "sheet": "node gen-sheet.js",
+    "test:render": "node test-svg-chart.js && node test-render.js"
+  },
+  "keywords": [
+    "retirement",
+    "finance",
+    "forecasting",
+    "tax",
+    "monte-carlo"
+  ],
+  "license": "UNLICENSED"
+}

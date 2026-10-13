@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Personal Finance &amp; Retirement Forecasting Tool</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<div id="app">
+
+  <div class="disclaimer">
+    <b>Planning estimate only — not tax or investment advice.</b>
+    Simplified 2026 tax figures; ignores AMT, itemised deductions, credits, QBI,
+    local tax, state bracket detail and health insurance costs.
+    <span id="assumeFlag"></span>
+  </div>
+
+  <div id="hud">
+
+    <!-- ============ STATUS STRIP + CHARACTER BAY ============ -->
+    <div class="strip" id="strip">
+      <div class="stat">
+        <div class="lbl" id="s0label">Net worth at target</div>
+        <div class="v" id="s0v">—</div><div class="d flat" id="s0d">—</div>
+      </div>
+      <div class="stat">
+        <div class="lbl">Lifetime tax</div>
+        <div class="v" id="s1v">—</div><div class="d flat" id="s1d">—</div>
+      </div>
+      <div class="stat">
+        <div class="lbl">Monte Carlo</div>
+        <div class="v" id="s2v">—</div><div class="d flat" id="s2d">run to see</div>
+      </div>
+      <div class="stat">
+        <div class="lbl">Plan status</div>
+        <div class="v" id="s3v" style="font-size:15px">—</div><div class="d flat" id="s3d">—</div>
+      </div>
+      <!-- bay is a CELL of the strip, so it can never stretch the band -->
+      <div class="bay" id="bay">
+        <span class="bolt" style="top:3px;left:3px"></span>
+        <span class="bolt" style="top:3px;right:3px"></span>
+        <span class="bolt" style="bottom:3px;left:3px"></span>
+        <span class="bolt" style="bottom:3px;right:3px"></span>
+        <span class="hazard"></span>
+        <div class="baylbl"><span class="t" id="bayTag">—</span><span class="led"></span></div>
+        <div class="stage" id="bayStage" role="button" tabindex="0" title="Click">
+          <span class="sweep"></span><span class="floorgrid"></span>
+          <div class="figwrap" id="bayFig"></div>
+          <span class="scan"></span><span class="scanbar"></span><span class="vign"></span>
+        </div>
+        <div class="baystat"><b id="bayStat">READY</b></div>
+        <div class="bark hidden" id="bayBark"></div>
+      </div>
+    </div>
+
+    <!-- ============ MAIN ============ -->
+    <div class="main">
+
+      <!-- command card -->
+      <div class="col">
+        <div class="pnl cmd" id="cmd">
+          <div class="lbl" style="margin-bottom:9px">Live controls</div>
+          <div id="ctlHost"></div>
+          <div class="keys">
+            <span class="key">1–6 focus</span><span class="key">↑↓ adjust</span>
+          </div>
+          <div class="keys" style="border:0;padding-top:5px">
+            <span class="key">S settings</span><span class="key">C character</span>
+            <span class="key">M mute</span>
+            <span class="key hidden" id="cheatMark" title="Auto-optimise unlocked — press O">◆ O optimise</span>
+            <span class="key cheatprog hidden" id="cheatProg"></span>
+          </div>
+          <div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap">
+            <button class="btn amb p hidden" id="btnOptimise" style="flex:1">◆ Auto-optimise</button>
+          </div>
+          <div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap">
+            <button class="btn g" id="btnSettings" style="flex:1">Settings</button>
+            <button class="btn g" id="btnCharacter" style="flex:1">Character</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- viewport -->
+      <div class="col">
+        <div class="pnl vp">
+          <div class="vphead">
+            <div class="vtabs" id="vtabs">
+              <button class="vt on" data-view="balances">Balances</button>
+              <button class="vt" data-view="networth">Net worth</button>
+              <button class="vt" data-view="tax">Tax</button>
+              <button class="vt" data-view="flow">Flow</button>
+              <button class="vt" data-view="bands">Bands</button>
+              <button class="vt" data-view="table">Table</button>
+            </div>
+            <button class="btn g helpbtn" id="btnHelp" title="Help (?)">?</button>
+          </div>
+          <!-- Plain sentence, its own line: a full sentence in the tab
+               row wrapped and pushed the last two tabs onto a second
+               row. -->
+          <div class="vpnote" id="vpNote"></div>
+          <div class="chartbox" id="chartbox"><canvas id="chart"></canvas></div>
+          <div class="tablewrap hidden" id="tablewrap"><table id="table"></table></div>
+          <div class="scrub">
+            <input type="range" id="scrubber" min="0" max="39" value="0" aria-label="Year">
+            <div class="ticks" id="ticks"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- inspector -->
+      <div class="col insp-col">
+        <div class="pnl insp" id="insp"></div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<div class="cheatbanner hidden" id="cheatBanner">
+  <b>CHEAT CODE ACCEPTED</b>
+  <span id="cheatVia"></span>
+  <span>Auto-optimise is now available — <code>O</code>, or the amber button.</span>
+</div>
+
+<!-- Orientation pointers, shown once on first run. -->
+<div class="tips hidden" id="tips"></div>
+
+<!-- ============ FIRST-RUN MODE PICKER ============ -->
+<div class="overlay hidden" id="modePick">
+  <div class="sheet" style="max-width:720px"></div>
+</div>
+
+<!-- ============ HELP (? key) ============ -->
+<div class="overlay hidden" id="help">
+  <div class="sheet" style="max-width:860px">
+    <div class="sheet-head">
+      <span class="sheet-title">Help</span>
+      <button class="btn g" id="helpClose">Close</button>
+    </div>
+    <div class="sheet-body">
+      <div class="setnav" id="helpNav"></div>
+      <div class="setbody" id="helpBody"></div>
+    </div>
+    <div class="sheet-foot">
+      <span class="note">Press <b>?</b> any time to open this.</span>
+      <span class="spacer"></span>
+      <button class="btn g" id="helpMode">Switch mode…</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ CHARACTER CREATION (own page) ============ -->
+<div class="overlay hidden" id="creation">
+  <div class="sheet" style="max-width:900px">
+    <div class="sheet-head">
+      <span class="sheet-title">Character creation</span>
+      <button class="btn g" id="creationSkip">Skip — use defaults</button>
+    </div>
+    <div class="rail" id="rail"></div>
+    <div class="setbody" id="creationBody" style="min-height:300px"></div>
+    <div class="sheet-foot">
+      <span class="note" id="creationHint"></span>
+      <span class="spacer"></span>
+      <button class="btn g" id="cBack">Back</button>
+      <button class="btn" id="cRandom">Randomise</button>
+      <button class="btn p" id="cNext">Next</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ SETTINGS ============ -->
+<div class="overlay hidden" id="settings">
+  <div class="sheet">
+    <div class="sheet-head">
+      <span class="sheet-title">Settings</span>
+      <button class="btn g" id="setClose">Close</button>
+    </div>
+    <div class="sheet-body">
+      <div class="setnav" id="setNav"></div>
+      <div class="setbody" id="setBody"></div>
+    </div>
+    <div class="sheet-foot">
+      <span class="note">Changes apply live. Amber dot = page holds a non-default value.</span>
+      <span class="spacer"></span>
+      <button class="btn g" id="setResetPage">Reset page</button>
+      <button class="btn g" id="setResetAll">Reset everything</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ AUTO-OPTIMISE ============ -->
+<div class="overlay hidden" id="optimise">
+  <div class="sheet" style="max-width:760px">
+    <div class="sheet-head">
+      <span class="sheet-title">Auto-optimise</span>
+      <button class="btn g" id="optClose">Close</button>
+    </div>
+    <div class="setbody" id="optBody" style="min-height:240px"></div>
+    <div class="sheet-foot">
+      <span class="note" id="optNote"></span>
+      <span class="spacer"></span>
+      <button class="btn g" id="optRun">Run again</button>
+      <button class="btn p" id="optApply">Apply all moves</button>
+    </div>
+  </div>
+</div>
+
+<!-- Chart.js. If this does not load — offline, a blocked CDN, an SRI
+     mismatch — app.js falls back to a built-in SVG renderer and says so
+     on screen. To make the bundle work offline, drop the library at
+     vendor/chart.umd.js and re-run `node build.js`, which inlines it
+     and removes this tag. -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.0/dist/chart.umd.js" integrity="sha384-iU8HYtnGQ8Cy4zl7gbNMOhsDTTKX02BTXptVP/vqAWIaTfM7isw76iyZCsjL2eVi" crossorigin="anonymous" onerror="window.__chartCdnFailed=true"></script>
+<script src="auth.js"></script>
+<script src="money.js"></script>
+<script src="tax-config.js"></script>
+<script src="tax-engine.js"></script>
+<script src="engine.js"></script>
+<script src="characters.js"></script>
+<script src="avatar.js"></script>
+<script src="svg-chart.js"></script>
+<script src="audio.js"></script>
+<script src="optimizer.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
